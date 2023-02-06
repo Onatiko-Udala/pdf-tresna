@@ -1,0 +1,35 @@
+{% extends 'base.html.twig' %}
+
+    {% block main %}
+        <main>
+            <h1>PDF batetik hainbat pdf eskuratu</h1>
+            <p class="fs-5 col-md-8">PDF bat igo ondoren, orri bakoitzeko pdf bat eskuratu. Hau da, PDF batek 10 orri baditu, 10 PDF eskuratuko ditugu.</p>
+
+            <hr class="col-3 col-md-2 mb-1">
+
+            <div class="row g-5">
+                <div class="col-md-2"></div>
+                <div class="col-md-8 text-center">
+                    {% for message in app.flashes('error') %}
+                        <div class="alert alert-danger">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="col-md-2"></div>
+                <div class="col-md-12">
+
+                    {{ form_start(form) }}
+                    {{ form_label(form.fitxategia, 'Fitxategia', {'label_attr': {'class': 'form-label'}}) }}
+                    {{ form_widget(form.fitxategia) }}
+                    {{ form_errors(form.fitxategia) }}
+
+                    <hr>
+
+                    {{ form_end(form) }}
+
+                </div>
+            </div>
+        </main>
+
+    {% endblock %}

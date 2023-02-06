@@ -76,10 +76,11 @@ class DefaultController extends AbstractController
                 return $this->redirectToRoute('app_pdf_ttiki');
             }
 
-            $dest = "/usr/src/app/public/uploads/";
+            $dest = $this->getParameter('app.uploads_path');
             $target_file = $dest . preg_replace("/[^a-z0-9\_\-\.]/i", '', $fitxategia->getClientOriginalName());
 
-            $process = new Process(['/usr/local/bin/shrinkpdf.sh', $fitxategia->getRealPath(), $target_file , $resolution]);
+            $process = new Process([$this->getParameter('app.shrinkpdf_path'), $fitxategia->getRealPath(), $target_file , $resolution]);
+            $process->setTimeout(24000);
             $process->run();
 
             // executes after the command finishes
@@ -90,6 +91,7 @@ class DefaultController extends AbstractController
 
             $response = new BinaryFileResponse($target_file);
             $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT);
+            $response->deleteFileAfterSend(true);
 
             return $response;
         }
@@ -125,10 +127,10 @@ class DefaultController extends AbstractController
             // data is an array with "name", "email", and "message" keys
             $data = $form->getData();
             $fitxategiak = $data['fitxategia'];
-            $targetfile = "/usr/src/app/public/uploads/" . md5(date('Y-m-d H:i:s:u')) . ".pdf";
+            $targetfile = $this->getParameter('app.uploads_path') . md5(date('Y-m-d H:i:s:u')) . ".pdf";
             $temp = "/tmp/" . md5(date('Y-m-d H:i:s:u')) ."/";
             $tempfile = 0;
-            $files = [];
+            $fitxategias = [];
             $total = count($fitxategiak);
 
 
@@ -144,11 +146,11 @@ class DefaultController extends AbstractController
                 ++$tempfile;
                 $tempFileName = "$tempfile.pdf";
                 $fitxategia->move($temp, $tempFileName);
-                $files[$tempfile] = $temp.$tempFileName;
+                $fitxategias[$tempfile] = $temp.$tempFileName;
 
             }
 
-            $pdf = new Pdf($files);
+            $pdf = new Pdf($fitxategias);
             $result = $pdf->cat()->saveAs($targetfile);
             if ($result === false) {
                 $error = $pdf->getError();
@@ -159,6 +161,7 @@ class DefaultController extends AbstractController
 
             $response = new BinaryFileResponse($targetfile);
             $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT);
+            $response->deleteFileAfterSend(true);
 
             return $response;
         }
@@ -223,7 +226,7 @@ class DefaultController extends AbstractController
             $tempfic1 = $temp . "fic1.pdf";
             $fic2->move($temp, 'fic2.pdf');
             $tempfic2 = $temp . "fic2.pdf";
-            $targetfile = "/usr/src/app/public/uploads/" . md5(date('Y-m-d H:i:s:u')) . ".pdf";
+            $targetfile = $this->getParameter('app.uploads_path') . md5(date('Y-m-d H:i:s:u')) . ".pdf";
 
             $pdf = new Pdf($tempfic1);
 //            $result = $pdf->attachFiles([$tempfic2],2);
@@ -234,10 +237,17 @@ class DefaultController extends AbstractController
 
                 return $this->redirectToRoute('app_pdf_gehitu');
             }
-            $pdf->saveAs($targetfile);
+            $result = $pdf->saveAs($targetfile);
+            if ($result === false) {
+                $error = $pdf->getError();
+                $this->addFlash('error', $error."saveAs erroria");
+
+                return $this->redirectToRoute('app_pdf_gehitu');
+            }
 
             $response = new BinaryFileResponse($targetfile);
             $response->setContentDisposition(ResponseHeaderBag::DISPOSITION_ATTACHMENT);
+            $response->deleteFileAfterSend(true);
 
             return $response;
         }
@@ -250,6 +260,7 @@ class DefaultController extends AbstractController
     #[Route('/banatu', name: 'app_pdf_banatu')]
     public function banatu(Request $request): \ZipArchive|Response
     {
+        $this->fitxategiak_ezabatu($this->getParameter('app.uploads_path'));
         $defaultDataBanatu = ['message' => 'Aukeratu fitxategia banatzeko'];
         $form = $this->createFormBuilder($defaultDataBanatu)
             ->add('fitxategia', FileType::class, [
@@ -274,15 +285,15 @@ class DefaultController extends AbstractController
             $data = $form->getData();
             $fitxategia = $data['fitxategia'];
 
-            $dest = "/usr/src/app/public/uploads/". md5(date('Y-m-d H:i:s:u'))."/";
-            $filename = preg_replace("/[^a-z0-9\_\-\.]/i", '', $fitxategia->getClientOriginalName());
-            $fitxategia->move($dest, $filename);
-            $target_file = $dest.$filename ;
+            $dest = $this->getParameter('app.uploads_path'). md5(date('Y-m-d H:i:s:u'))."/";
+            $fitxategianame = preg_replace("/[^a-z0-9\_\-\.]/i", '', $fitxategia->getClientOriginalName());
+            $fitxategia->move($dest, $fitxategianame);
+            $target_file = $dest.$fitxategianame ;
 
 
             $pdf = new Pdf($target_file);
-            $files = $pdf->burst($dest."pg_%04d.pdf");
-            if ($files === false) {
+            $fitxategias = $pdf->burst($dest."pg_%04d.pdf");
+            if ($fitxategias === false) {
                 $error = $pdf->getError();
                 $this->addFlash('error', $error);
                 $this->redirectToRoute('app_pdf_banatu');
@@ -290,13 +301,13 @@ class DefaultController extends AbstractController
 
             // new zip
             $zip = new \ZipArchive();
-            $zipName = $dest.preg_replace("/[^a-z0-9\_\-\.]/i", '', preg_replace('/(.*)\\.[^\\.]*/', '$1', $fitxategia->getClientOriginalName())).".zip";
+            $zipName = "banatuta_".preg_replace("/[^a-z0-9\_\-\.]/i", '', preg_replace('/(.*)\\.[^\\.]*/', '$1', $fitxategia->getClientOriginalName())).".zip";
             // get files
             $finder = new Finder();
             $finder->files()->name('pg_*')->in($dest);
 
             // loop files
-            foreach ($finder as $file) {
+            foreach ($finder as $fitxategia) {
 
                 // open zip
                 if ($zip->open($zipName, \ZipArchive::CREATE) !== true) {
@@ -304,7 +315,7 @@ class DefaultController extends AbstractController
                 }
 
                 // add to zip
-                $zip->addFile($file->getRealpath(), basename($file->getRealpath()));
+                $zip->addFile($fitxategia->getRealpath(), basename($fitxategia->getRealpath()));
 
                 // close zip
                 if(!$zip->close()) {
@@ -313,20 +324,40 @@ class DefaultController extends AbstractController
             }
 
 
-//            return $zip;
+//          return $zip;
             $response = new Response(file_get_contents($zipName));
             $response->headers->set('Content-Type', 'application/zip');
             $response->headers->set('Content-Disposition', 'attachment;filename="' . $zipName . '"');
             $response->headers->set('Content-length', filesize($zipName));
-
-            @unlink($zipName);
+            
+            //@unlink($zipName);
 
             return $response;
         }
 
-        return $this->render('default/elkartu.html.twig', [
             'form' => $form->createView()
         ]);
+    }
+
+    private function fitxategiak_ezabatu($helbidea){
+        
+        if (is_dir($helbidea)) {
+            if ($karptea = opendir($helbidea)) {
+                while (($fitxategia = readdir($karptea)) !== false) {
+                    if(is_dir($helbidea . $fitxategia) !== true && $fitxategia!="." && $fitxategia!=".."){
+                        if(filesize("$helbidea$fitxategia") !== 0) unlink("$helbidea$fitxategia");
+                    }
+                    if (is_dir($helbidea . $fitxategia) && $fitxategia!="." && $fitxategia!=".."){
+                        if(count(scandir($helbidea . $fitxategia)) == 2){
+                            rmdir($helbidea . $fitxategia);
+                        }else{
+                            $this->fitxategiak_ezabatu($helbidea . $fitxategia . "/");
+                        }
+                    }
+                }
+            closedir($karptea);
+            }
+        }
     }
 
 }
